@@ -6,6 +6,8 @@ import numpy as np
 import streamlit as st
 from PIL import Image
 
+from magic_eye.depth_sculpt import generate_synthetic_depth
+
 from magic_eye.stereogram import (
     StereogramParams,
     generate_autostereogram,
@@ -136,6 +138,17 @@ show_depth_debug = st.sidebar.checkbox(
     "Show depth debug (raw/remapped/smoothed)", value=False
 )
 
+auto_sculpt_depth = st.sidebar.checkbox(
+    "Enhance depth for Magic Eye (recommended)",
+    value=True,
+)
+
+sculpt_strength = st.sidebar.slider(
+    "Depth sculpt strength",
+    0.0, 1.0, 0.6, 0.05,
+)
+
+
 st.sidebar.header("Stereogram")
 pattern_source = st.sidebar.selectbox(
     "Pattern source",
@@ -186,23 +199,32 @@ if generate:
                 st.error("Please upload an image.")
                 st.stop()
 
-            try:
-                from magic_eye.depth_ai import estimate_depth
-            except ImportError:
-                st.error(
-                    "AI depth estimation not available. "
-                    "Install optional dependencies with `pip install -e .[ai]`."
-                )
-                st.stop()
+            from magic_eye.depth_ai import estimate_depth
 
+            # --- Read uploaded image bytes ONCE ---
             img_bytes = uploaded_image.read()
             suffix = Path(uploaded_image.name).suffix or ".png"
 
+            # --- Decode image to RGB NumPy array (needed for sculpting) ---
+            img_pil = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+            img_rgb = np.asarray(img_pil, dtype=np.uint8)
+
+            # --- Write temp file for AI depth model ---
             with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                 tmp.write(img_bytes)
                 tmp_path = tmp.name
 
+            # --- Estimate AI depth ---
             depth = estimate_depth(tmp_path)
+
+            # --- OPTIONAL: synthetic depth sculpting ---
+            if auto_sculpt_depth:
+                depth = generate_synthetic_depth(
+                    depth,
+                    img_rgb,
+                    strength=sculpt_strength,
+                )
+
 
             # Best-effort cleanup of temp file
             try:
