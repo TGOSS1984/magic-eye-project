@@ -25,6 +25,9 @@ ai = [
   "opencv-python>=4.9"
 ]
 
+web = [
+  "streamlit>=1.32"
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

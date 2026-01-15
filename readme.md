@@ -92,3 +92,29 @@ Without AI:
 ```bash
 pytest
 python -m magic_eye.cli --depth depth.png --out out.png
+## Web Demo (Streamlit)
+
+An interactive Streamlit app is included for live experimentation.
+
+```bash
+pip install -e .[web]
+streamlit run app/streamlit_app.py
+
+The web app supports:
+
+depth map uploads
+
+AI depth from photos (optional)
+
+texture patterns
+
+live depth controls
+
+
+---
+
+# 4️⃣ Run locally
+
+```bash
+pip install -e .[web]
+streamlit run app/streamlit_app.py
