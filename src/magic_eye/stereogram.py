@@ -47,6 +47,7 @@ def generate_autostereogram(
     params: Optional[StereogramParams] = None,
     output_mode: str = "RGB",
     rng: Optional[np.random.Generator] = None,
+    seed: Optional[int] = None,
 ) -> np.ndarray:
     """
     Generate a single-image stereogram (Magic Eye / autostereogram) from a depth map.
@@ -64,7 +65,9 @@ def generate_autostereogram(
     output_mode:
         "RGB" (default) or "L" (grayscale).
     rng:
-        Optional NumPy random generator. If None, uses default generator.
+        Optional NumPy random generator. If provided, it is used directly.
+    seed:
+        Optional integer seed. Used only if rng is None. Enables deterministic output.
 
     Returns
     -------
@@ -89,7 +92,8 @@ def generate_autostereogram(
             f"(got {params.eye_separation_px} >= {w})."
         )
 
-    rng = rng or np.random.default_rng()
+    if rng is None:
+        rng = np.random.default_rng(seed)
 
     if output_mode.upper() == "RGB":
         channels = 3

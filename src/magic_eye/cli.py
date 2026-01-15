@@ -47,6 +47,14 @@ def build_parser() -> argparse.ArgumentParser:
         help='Output mode: "RGB" (default) or "L" (grayscale).',
     )
 
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Optional random seed for deterministic output.",
+    )
+
+
     return parser
 
 
@@ -61,7 +69,13 @@ def main(argv: list[str] | None = None) -> int:
         max_shift_px=args.max_shift,
     )
 
-    img = generate_autostereogram(depth, params=params, output_mode=args.mode)
+    img = generate_autostereogram(
+        depth,
+        params=params,
+        output_mode=args.mode,
+        seed=args.seed,
+    )
+
 
     save_image(img, args.out)
 

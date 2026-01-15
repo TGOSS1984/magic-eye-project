@@ -36,3 +36,22 @@ def test_eye_separation_must_be_less_than_width():
         assert False, "Expected ValueError for invalid eye_separation_px"
     except ValueError:
         assert True
+
+def test_deterministic_output_same_seed_matches():
+    depth = np.tile(np.linspace(0.0, 1.0, 160, dtype=np.float32), (60, 1))
+    params = StereogramParams(eye_separation_px=40, max_shift_px=16)
+
+    img1 = generate_autostereogram(depth, params=params, seed=123)
+    img2 = generate_autostereogram(depth, params=params, seed=123)
+
+    assert np.array_equal(img1, img2)
+
+
+def test_deterministic_output_different_seed_differs():
+    depth = np.tile(np.linspace(0.0, 1.0, 160, dtype=np.float32), (60, 1))
+    params = StereogramParams(eye_separation_px=40, max_shift_px=16)
+
+    img1 = generate_autostereogram(depth, params=params, seed=1)
+    img2 = generate_autostereogram(depth, params=params, seed=2)
+
+    assert not np.array_equal(img1, img2)
