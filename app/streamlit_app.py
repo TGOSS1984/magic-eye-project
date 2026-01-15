@@ -6,7 +6,13 @@ import numpy as np
 import streamlit as st
 from PIL import Image
 
-from magic_eye.stereogram import StereogramParams, generate_autostereogram
+from magic_eye.stereogram import (
+    StereogramParams,
+    generate_autostereogram,
+    remap_depth,
+    smooth_depth,
+)
+
 
 
 st.set_page_config(
@@ -57,6 +63,8 @@ near = st.sidebar.slider("Near", 0.0, 1.0, 1.0, 0.01)
 far = st.sidebar.slider("Far", 0.0, 1.0, 0.0, 0.01)
 gamma = st.sidebar.slider("Gamma", 0.2, 3.0, 1.0, 0.05)
 depth_blur = st.sidebar.slider("Depth smoothing (blur radius)", 0.0, 3.0, 0.8, 0.1)
+show_depth_debug = st.sidebar.checkbox("Show depth debug (raw/remapped/smoothed)", value=False)
+
 
 
 st.sidebar.header("Stereogram")
@@ -119,6 +127,48 @@ if generate:
                 st.stop()
 
             depth = (depth - dmin) / (dmax - dmin)
+
+        # ---- Depth debug preview ----
+        
+        if show_depth_debug:
+            depth_raw = np.clip(depth, 0.0, 1.0).astype(np.float32)
+
+            depth_remapped = remap_depth(
+                depth_raw, near=near, far=far, gamma=gamma
+            )
+            depth_smoothed = smooth_depth(
+                depth_remapped, radius=depth_blur
+            )
+
+            st.subheader("Depth debug preview")
+
+            c1, c2, c3 = st.columns(3)
+
+            def to_u8(d: np.ndarray) -> np.ndarray:
+                return (np.clip(d, 0.0, 1.0) * 255.0).astype(np.uint8)
+
+            with c1:
+                st.caption(
+                    f"Raw depth (min={depth_raw.min():.3f}, "
+                    f"max={depth_raw.max():.3f})"
+                )
+                st.image(to_u8(depth_raw), clamp=True)
+
+            with c2:
+                st.caption(
+                    f"Remapped (near={near:.2f}, far={far:.2f}, gamma={gamma:.2f}) "
+                    f"(min={depth_remapped.min():.3f}, "
+                    f"max={depth_remapped.max():.3f})"
+                )
+                st.image(to_u8(depth_remapped), clamp=True)
+
+            with c3:
+                st.caption(
+                    f"Smoothed (blur={depth_blur:.2f}) "
+                    f"(min={depth_smoothed.min():.3f}, "
+                    f"max={depth_smoothed.max():.3f})"
+                )
+                st.image(to_u8(depth_smoothed), clamp=True)
 
         # ---- Optional pattern ----
         pattern = None
