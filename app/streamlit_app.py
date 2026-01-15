@@ -13,6 +13,53 @@ from magic_eye.stereogram import (
     smooth_depth,
 )
 
+PRESETS = {
+    "Balanced (default)": {
+        "near": 0.90,
+        "far": 0.25,
+        "gamma": 1.5,
+        "eye_sep": 90,
+        "max_shift": 32,
+        "depth_blur": 0.6,
+        "bidirectional": True,
+    },
+    "Character / Portrait": {
+        "near": 0.92,
+        "far": 0.20,
+        "gamma": 1.7,
+        "eye_sep": 85,
+        "max_shift": 34,
+        "depth_blur": 0.5,
+        "bidirectional": False,
+    },
+    "Creature / Wide subject": {
+        "near": 0.92,
+        "far": 0.35,
+        "gamma": 1.6,
+        "eye_sep": 100,
+        "max_shift": 38,
+        "depth_blur": 0.9,
+        "bidirectional": True,
+    },
+    "Landscape / Scene": {
+        "near": 0.85,
+        "far": 0.40,
+        "gamma": 1.4,
+        "eye_sep": 110,
+        "max_shift": 28,
+        "depth_blur": 1.2,
+        "bidirectional": True,
+    },
+    "High detail / Noisy depth": {
+        "near": 0.90,
+        "far": 0.30,
+        "gamma": 1.8,
+        "eye_sep": 95,
+        "max_shift": 30,
+        "depth_blur": 1.4,
+        "bidirectional": True,
+    },
+}
 
 
 st.set_page_config(
@@ -37,6 +84,14 @@ Generate **Magic Eye / autostereogram images** from depth maps or ordinary photo
 # ----------------------------
 st.sidebar.header("Input")
 
+preset_name = st.sidebar.selectbox(
+    "Preset",
+    list(PRESETS.keys()),
+    index=0,
+)
+preset = PRESETS[preset_name]
+
+
 use_ai = st.sidebar.checkbox("Use AI depth from photo", value=False)
 
 uploaded_depth = None
@@ -59,18 +114,51 @@ uploaded_pattern = st.sidebar.file_uploader(
 )
 
 st.sidebar.header("Depth controls")
-near = st.sidebar.slider("Near", 0.0, 1.0, 1.0, 0.01)
-far = st.sidebar.slider("Far", 0.0, 1.0, 0.0, 0.01)
-gamma = st.sidebar.slider("Gamma", 0.2, 3.0, 1.0, 0.05)
-depth_blur = st.sidebar.slider("Depth smoothing (blur radius)", 0.0, 3.0, 0.8, 0.1)
+near = st.sidebar.slider(
+    "Near", 0.0, 1.0, preset["near"], 0.01
+)
+far = st.sidebar.slider(
+    "Far", 0.0, 1.0, preset["far"], 0.01
+)
+gamma = st.sidebar.slider(
+    "Gamma", 0.2, 3.0, preset["gamma"], 0.05
+)
+
+depth_blur = st.sidebar.slider(
+    "Depth smoothing (blur radius)",
+    0.0, 3.0,
+    preset["depth_blur"],
+    0.1,
+)
+
 show_depth_debug = st.sidebar.checkbox("Show depth debug (raw/remapped/smoothed)", value=False)
 
 
 
 st.sidebar.header("Stereogram")
-bidirectional = st.sidebar.checkbox("Bidirectional pass (improves wide shapes)", value=True)
-eye_sep = st.sidebar.slider("Eye separation (px)", 20, 150, 80, 5)
-max_shift = st.sidebar.slider("Max depth shift (px)", 0, 60, 24, 2)
+eye_sep = st.sidebar.slider(
+    "Eye separation (px)",
+    20, 150,
+    preset["eye_sep"],
+    5,
+)
+
+max_shift = st.sidebar.slider(
+    "Max depth shift (px)",
+    0, 60,
+    preset["max_shift"],
+    2,
+)
+
+bidirectional = st.sidebar.checkbox(
+    "Bidirectional pass (improves wide shapes)",
+    value=preset["bidirectional"],
+)
+
+st.sidebar.caption(
+    f"Preset tuned for: **{preset_name}**"
+)
+
 
 mode = st.sidebar.selectbox("Output mode", ["RGB", "L"])
 
