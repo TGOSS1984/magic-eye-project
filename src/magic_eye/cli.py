@@ -61,6 +61,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional texture/pattern image to tile across the output (PNG/JPG).",
     )
 
+    parser.add_argument(
+        "--near",
+        type=float,
+        default=1.0,
+        help="Input depth value treated as near (mapped to 1.0). Default: 1.0",
+    )
+    parser.add_argument(
+        "--far",
+        type=float,
+        default=0.0,
+        help="Input depth value treated as far (mapped to 0.0). Default: 0.0",
+    )
+    parser.add_argument(
+        "--gamma",
+        type=float,
+        default=1.0,
+        help="Depth curve shaping (>1 punchier, <1 flatter). Default: 1.0",
+    )
+
+
 
 
     return parser
@@ -89,6 +109,9 @@ def main(argv: list[str] | None = None) -> int:
         output_mode=args.mode,
         pattern=pattern,
         seed=args.seed,
+        near=args.near,
+        far=args.far,
+        gamma=args.gamma,
     )
 
     save_image(img, args.out)

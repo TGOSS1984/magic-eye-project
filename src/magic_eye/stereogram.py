@@ -60,6 +60,36 @@ def _tile_pattern(pattern: np.ndarray, h: int, w: int) -> np.ndarray:
 
     raise ValueError("Pattern must be a 2D (L) or 3D (RGB) array.")
 
+def remap_depth(depth: np.ndarray, *, near: float, far: float, gamma: float) -> np.ndarray:
+    """
+    Remap a normalised depth map [0..1] into a usable depth signal.
+
+    near:
+        Depth value in the input considered "near" (mapped to 1.0).
+    far:
+        Depth value in the input considered "far" (mapped to 0.0).
+    gamma:
+        Curve applied after range remap. >1 makes near areas pop more,
+        <1 boosts mid/far values.
+
+    Returns float32 depth in [0..1].
+    """
+    if gamma <= 0:
+        raise ValueError("gamma must be > 0")
+
+    # Handle inverted ranges safely (if near < far, this will invert)
+    denom = near - far
+    if denom == 0:
+        raise ValueError("near and far must not be equal")
+
+    d = (depth - far) / denom
+    d = np.clip(d, 0.0, 1.0).astype(np.float32, copy=False)
+
+    if gamma != 1.0:
+        d = np.power(d, gamma, dtype=np.float32)
+
+    return d
+
 
 def generate_autostereogram(
     depth: np.ndarray,
@@ -69,7 +99,11 @@ def generate_autostereogram(
     pattern: Optional[np.ndarray] = None,
     rng: Optional[np.random.Generator] = None,
     seed: Optional[int] = None,
+    near: float = 1.0,
+    far: float = 0.0,
+    gamma: float = 1.0,
 ) -> np.ndarray:
+
     """
     Generate a single-image stereogram (Magic Eye / autostereogram) from a depth map.
 
@@ -95,6 +129,13 @@ def generate_autostereogram(
         Optional NumPy random generator. If provided, it is used directly.
     seed:
         Optional integer seed. Used only if rng is None. Enables deterministic output.
+    near:
+        Input depth value treated as "near" (mapped to 1.0). Default 1.0.
+    far:
+        Input depth value treated as "far" (mapped to 0.0). Default 0.0.
+    gamma:
+        Depth curve shaping. Default 1.0 (no change).
+
 
     Returns
     -------
@@ -105,6 +146,8 @@ def generate_autostereogram(
     """
     params = params or StereogramParams()
     depth = _validate_depth(depth)
+    depth = remap_depth(depth, near=near, far=far, gamma=gamma)
+
 
     if params.eye_separation_px <= 0:
         raise ValueError("eye_separation_px must be > 0")
