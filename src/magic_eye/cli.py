@@ -95,6 +95,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Apply constraints in both directions to reduce left/right bias.",
     )
 
+    parser.add_argument(
+        "--depth-blur",
+        type=float,
+        default=0.0,
+        help="Optional Gaussian blur radius applied to depth map (default: 0.0).",
+    )
+
+
 
     return parser
 
@@ -140,6 +148,8 @@ def main(argv: list[str] | None = None) -> int:
         far=args.far,
         gamma=args.gamma,
         bidirectional=args.bidirectional,
+        depth_blur=args.depth_blur,
+
     )
 
     # Save output

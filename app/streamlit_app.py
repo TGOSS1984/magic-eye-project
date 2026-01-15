@@ -56,14 +56,15 @@ st.sidebar.header("Depth controls")
 near = st.sidebar.slider("Near", 0.0, 1.0, 1.0, 0.01)
 far = st.sidebar.slider("Far", 0.0, 1.0, 0.0, 0.01)
 gamma = st.sidebar.slider("Gamma", 0.2, 3.0, 1.0, 0.05)
+depth_blur = st.sidebar.slider("Depth smoothing (blur radius)", 0.0, 3.0, 0.8, 0.1)
+
 
 st.sidebar.header("Stereogram")
+bidirectional = st.sidebar.checkbox("Bidirectional pass (improves wide shapes)", value=True)
 eye_sep = st.sidebar.slider("Eye separation (px)", 20, 150, 80, 5)
 max_shift = st.sidebar.slider("Max depth shift (px)", 0, 60, 24, 2)
 
 mode = st.sidebar.selectbox("Output mode", ["RGB", "L"])
-
-bidirectional = st.sidebar.checkbox("Bidirectional pass (improves wide shapes)", value=True)
 
 seed = st.sidebar.number_input(
     "Random seed (optional)",
@@ -145,6 +146,8 @@ if generate:
             far=far,
             gamma=gamma,
             bidirectional=bidirectional,
+            depth_blur=depth_blur,
+
         )
 
         # ---- Display + download ----

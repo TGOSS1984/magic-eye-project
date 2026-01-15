@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Optional
+from PIL import Image, ImageFilter
+
 
 import numpy as np
 
@@ -69,6 +71,27 @@ def remap_depth(depth: np.ndarray, *, near: float, far: float, gamma: float) -> 
         d = np.power(d, gamma, dtype=np.float32)
 
     return d
+
+def smooth_depth(depth: np.ndarray, *, radius: float) -> np.ndarray:
+    """
+    Smooth a normalised depth map [0..1] using a Gaussian blur.
+
+    radius:
+        Pillow GaussianBlur radius. 0 disables smoothing.
+
+    Returns float32 depth in [0..1].
+    """
+    if radius <= 0:
+        return depth.astype(np.float32, copy=False)
+
+    # Convert to 8-bit grayscale image for Pillow filtering
+    depth_u8 = np.clip(depth * 255.0, 0, 255).astype(np.uint8)
+    img = Image.fromarray(depth_u8, mode="L")
+    img_blur = img.filter(ImageFilter.GaussianBlur(radius=float(radius)))
+
+    out = np.asarray(img_blur, dtype=np.float32) / 255.0
+    return np.clip(out, 0.0, 1.0).astype(np.float32)
+
 
 
 def _tile_pattern(pattern: np.ndarray, h: int, w: int) -> np.ndarray:
@@ -149,6 +172,7 @@ def generate_autostereogram(
     far: float = 0.0,
     gamma: float = 1.0,
     bidirectional: bool = False,
+    depth_blur: float = 0.0,
 ) -> np.ndarray:
     """
     Generate a single-image stereogram (Magic Eye / autostereogram) from a depth map.
@@ -191,6 +215,8 @@ def generate_autostereogram(
     params = params or StereogramParams()
     depth = _validate_depth(depth)
     depth = remap_depth(depth, near=near, far=far, gamma=gamma)
+    depth = smooth_depth(depth, radius=depth_blur)
+
 
     if params.eye_separation_px <= 0:
         raise ValueError("eye_separation_px must be > 0")
