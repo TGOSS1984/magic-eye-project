@@ -1,10 +1,12 @@
 import io
+import tempfile
+from pathlib import Path
+
 import numpy as np
 import streamlit as st
 from PIL import Image
 
-from magic_eye.io import load_depth_map, load_pattern
-from magic_eye.stereogram import generate_autostereogram, StereogramParams
+from magic_eye.stereogram import StereogramParams, generate_autostereogram
 
 
 st.set_page_config(
@@ -51,17 +53,17 @@ uploaded_pattern = st.sidebar.file_uploader(
 )
 
 st.sidebar.header("Depth controls")
-
 near = st.sidebar.slider("Near", 0.0, 1.0, 1.0, 0.01)
 far = st.sidebar.slider("Far", 0.0, 1.0, 0.0, 0.01)
 gamma = st.sidebar.slider("Gamma", 0.2, 3.0, 1.0, 0.05)
 
 st.sidebar.header("Stereogram")
-
 eye_sep = st.sidebar.slider("Eye separation (px)", 20, 150, 80, 5)
 max_shift = st.sidebar.slider("Max depth shift (px)", 0, 60, 24, 2)
 
 mode = st.sidebar.selectbox("Output mode", ["RGB", "L"])
+
+bidirectional = st.sidebar.checkbox("Bidirectional pass (improves wide shapes)", value=True)
 
 seed = st.sidebar.number_input(
     "Random seed (optional)",
@@ -76,6 +78,7 @@ generate = st.sidebar.button("Generate Magic Eye")
 # ----------------------------
 if generate:
     try:
+        # ---- Get depth ----
         if use_ai:
             if uploaded_image is None:
                 st.error("Please upload an image.")
@@ -90,13 +93,15 @@ if generate:
                 )
                 st.stop()
 
+            # Write uploaded bytes to a temporary file so estimate_depth() can use a path
             img_bytes = uploaded_image.read()
-            image = Image.open(io.BytesIO(img_bytes)).convert("RGB")
-            tmp = io.BytesIO()
-            image.save(tmp, format="PNG")
-            tmp.seek(0)
+            suffix = Path(uploaded_image.name).suffix or ".png"
 
-            depth = estimate_depth(tmp)
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                tmp.write(img_bytes)
+                tmp_path = tmp.name
+
+            depth = estimate_depth(tmp_path)
 
         else:
             if uploaded_depth is None:
@@ -105,13 +110,26 @@ if generate:
 
             depth_img = Image.open(uploaded_depth).convert("L")
             depth = np.asarray(depth_img, dtype=np.float32)
-            depth = (depth - depth.min()) / (depth.max() - depth.min())
 
+            dmin = float(depth.min())
+            dmax = float(depth.max())
+            if dmax == dmin:
+                st.error("Depth map has no variation (all pixels identical).")
+                st.stop()
+
+            depth = (depth - dmin) / (dmax - dmin)
+
+        # ---- Optional pattern ----
         pattern = None
         if uploaded_pattern is not None:
-            pattern_img = Image.open(uploaded_pattern)
-            pattern = load_pattern(uploaded_pattern, mode=mode)
+            if mode == "RGB":
+                pattern_img = Image.open(uploaded_pattern).convert("RGB")
+                pattern = np.asarray(pattern_img, dtype=np.uint8)
+            else:
+                pattern_img = Image.open(uploaded_pattern).convert("L")
+                pattern = np.asarray(pattern_img, dtype=np.uint8)
 
+        # ---- Generate stereogram ----
         params = StereogramParams(
             eye_separation_px=int(eye_sep),
             max_shift_px=int(max_shift),
@@ -126,8 +144,10 @@ if generate:
             near=near,
             far=far,
             gamma=gamma,
+            bidirectional=bidirectional,
         )
 
+        # ---- Display + download ----
         st.subheader("Result")
         st.image(result, clamp=True)
 
@@ -144,3 +164,4 @@ if generate:
 
     except Exception as exc:
         st.exception(exc)
+

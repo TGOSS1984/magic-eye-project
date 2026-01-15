@@ -89,8 +89,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional RGB image to estimate depth from using AI.",
     )
 
-
-
+    parser.add_argument(
+        "--bidirectional",
+        action="store_true",
+        help="Apply constraints in both directions to reduce left/right bias.",
+    )
 
 
     return parser
@@ -136,6 +139,7 @@ def main(argv: list[str] | None = None) -> int:
         near=args.near,
         far=args.far,
         gamma=args.gamma,
+        bidirectional=args.bidirectional,
     )
 
     # Save output

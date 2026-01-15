@@ -22,7 +22,8 @@ dev = [
 ai = [
   "torch>=2.1",
   "torchvision>=0.16",
-  "opencv-python>=4.9"
+  "opencv-python>=4.9",
+  "timm>=0.9"
 ]
 
 web = [

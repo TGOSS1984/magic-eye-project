@@ -20,12 +20,11 @@ def estimate_depth(image_path: PathLike) -> np.ndarray:
     Raises
     ------
     ImportError
-        If torch / torchvision / cv2 are not installed.
+        If torch / cv2 are not installed.
     """
     try:
         import cv2
         import torch
-        import torchvision.transforms as T
     except ImportError as exc:
         raise ImportError(
             "AI depth estimation requires optional dependencies. "
@@ -38,36 +37,39 @@ def estimate_depth(image_path: PathLike) -> np.ndarray:
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model = torch.hub.load(
-        "intel-isl/MiDaS",
-        "DPT_Small",
-        pretrained=True,
-    )
+    # Use stable hub model name
+    model = torch.hub.load("intel-isl/MiDaS", "MiDaS_small", pretrained=True)
     model.to(device)
     model.eval()
 
-    transform = T.Compose(
-        [
-            T.ToTensor(),
-            T.Resize(256, antialias=True),
-            T.Normalize(mean=0.5, std=0.5),
-        ]
-    )
+    # Use the transforms provided by the MiDaS repo (most compatible)
+    midas_transforms = torch.hub.load("intel-isl/MiDaS", "transforms")
+    transform = midas_transforms.small_transform
 
     img_bgr = cv2.imread(str(image_path))
-    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+    if img_bgr is None:
+        raise ValueError("Could not read image (cv2.imread returned None).")
 
-    input_tensor = transform(img_rgb).unsqueeze(0).to(device)
+    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+    h, w = img_rgb.shape[:2]
+
+    input_batch = transform(img_rgb).to(device)
 
     with torch.no_grad():
-        prediction = model(input_tensor)
+        prediction = model(input_batch)
+        prediction = torch.nn.functional.interpolate(
+            prediction.unsqueeze(1),
+            size=(h, w),
+            mode="bicubic",
+            align_corners=False,
+        ).squeeze(1)
 
     depth = prediction.squeeze().cpu().numpy()
 
-    # Normalise to [0..1]
-    dmin, dmax = depth.min(), depth.max()
+    dmin, dmax = float(depth.min()), float(depth.max())
     if dmax == dmin:
         raise ValueError("Depth estimator returned constant output")
 
     depth = (depth - dmin) / (dmax - dmin)
     return depth.astype(np.float32)
+

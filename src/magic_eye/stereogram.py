@@ -40,25 +40,6 @@ def _validate_depth(depth: np.ndarray) -> np.ndarray:
 
     return depth
 
-def _tile_pattern(pattern: np.ndarray, h: int, w: int) -> np.ndarray:
-    """
-    Tile a pattern image to exactly (h, w) or (h, w, c).
-    """
-    if pattern.ndim == 2:
-        ph, pw = pattern.shape
-        reps_y = (h + ph - 1) // ph
-        reps_x = (w + pw - 1) // pw
-        tiled = np.tile(pattern, (reps_y, reps_x))
-        return tiled[:h, :w]
-
-    if pattern.ndim == 3:
-        ph, pw, c = pattern.shape
-        reps_y = (h + ph - 1) // ph
-        reps_x = (w + pw - 1) // pw
-        tiled = np.tile(pattern, (reps_y, reps_x, 1))
-        return tiled[:h, :w, :]
-
-    raise ValueError("Pattern must be a 2D (L) or 3D (RGB) array.")
 
 def remap_depth(depth: np.ndarray, *, near: float, far: float, gamma: float) -> np.ndarray:
     """
@@ -77,7 +58,6 @@ def remap_depth(depth: np.ndarray, *, near: float, far: float, gamma: float) -> 
     if gamma <= 0:
         raise ValueError("gamma must be > 0")
 
-    # Handle inverted ranges safely (if near < far, this will invert)
     denom = near - far
     if denom == 0:
         raise ValueError("near and far must not be equal")
@@ -91,6 +71,72 @@ def remap_depth(depth: np.ndarray, *, near: float, far: float, gamma: float) -> 
     return d
 
 
+def _tile_pattern(pattern: np.ndarray, h: int, w: int) -> np.ndarray:
+    """
+    Tile a pattern image to exactly (h, w) or (h, w, c).
+    """
+    if pattern.ndim == 2:
+        ph, pw = pattern.shape
+        reps_y = (h + ph - 1) // ph
+        reps_x = (w + pw - 1) // pw
+        tiled = np.tile(pattern, (reps_y, reps_x))
+        return tiled[:h, :w]
+
+    if pattern.ndim == 3:
+        ph, pw, _c = pattern.shape
+        reps_y = (h + ph - 1) // ph
+        reps_x = (w + pw - 1) // pw
+        tiled = np.tile(pattern, (reps_y, reps_x, 1))
+        return tiled[:h, :w, :]
+
+    raise ValueError("Pattern must be a 2D (L) or 3D (RGB) array.")
+
+
+def _apply_constraints(
+    out: np.ndarray,
+    depth: np.ndarray,
+    *,
+    sep: int,
+    max_shift: int,
+    direction: str,
+) -> np.ndarray:
+    """
+    Apply stereogram matching constraints in one direction.
+
+    direction:
+        "lr" = left-to-right (reference tends to be on the left)
+        "rl" = right-to-left (reference tends to be on the right)
+    """
+    h, w = depth.shape
+    channels = 1 if out.ndim == 2 else out.shape[2]
+
+    if direction == "lr":
+        for y in range(h):
+            for x in range(sep, w):
+                shift = int(round(depth[y, x] * max_shift))
+                partner = x - sep + shift
+                if partner >= 0:
+                    if channels == 3:
+                        out[y, x, :] = out[y, partner, :]
+                    else:
+                        out[y, x] = out[y, partner]
+        return out
+
+    if direction == "rl":
+        for y in range(h):
+            for x in range(w - sep - 1, -1, -1):
+                shift = int(round(depth[y, x] * max_shift))
+                partner = x + sep - shift
+                if partner < w:
+                    if channels == 3:
+                        out[y, x, :] = out[y, partner, :]
+                    else:
+                        out[y, x] = out[y, partner]
+        return out
+
+    raise ValueError('direction must be "lr" or "rl".')
+
+
 def generate_autostereogram(
     depth: np.ndarray,
     *,
@@ -102,13 +148,15 @@ def generate_autostereogram(
     near: float = 1.0,
     far: float = 0.0,
     gamma: float = 1.0,
+    bidirectional: bool = False,
 ) -> np.ndarray:
-
     """
     Generate a single-image stereogram (Magic Eye / autostereogram) from a depth map.
 
-    This MVP implementation uses a random-dot base and enforces horizontal matching
-    constraints row-by-row.
+    This implementation uses a base texture (random dots or optional pattern) and
+    enforces horizontal matching constraints. If bidirectional=True, it applies
+    constraints left→right and right→left and combines the results to reduce
+    directional bias (useful for wide subjects like wings/landscapes).
 
     Parameters
     ----------
@@ -119,23 +167,19 @@ def generate_autostereogram(
         Stereogram parameters (eye separation and max shift).
     output_mode:
         "RGB" (default) or "L" (grayscale).
-        pattern:
+    pattern:
         Optional texture/pattern image array to use instead of random dots.
         - For RGB output: provide shape (Hp, Wp, 3), dtype uint8
         - For grayscale output: provide shape (Hp, Wp), dtype uint8
         The pattern will be tiled to the output size.
-
     rng:
         Optional NumPy random generator. If provided, it is used directly.
     seed:
         Optional integer seed. Used only if rng is None. Enables deterministic output.
-    near:
-        Input depth value treated as "near" (mapped to 1.0). Default 1.0.
-    far:
-        Input depth value treated as "far" (mapped to 0.0). Default 0.0.
-    gamma:
-        Depth curve shaping. Default 1.0 (no change).
-
+    near, far, gamma:
+        Depth remapping controls.
+    bidirectional:
+        If True, apply constraints in both directions and blend results.
 
     Returns
     -------
@@ -147,7 +191,6 @@ def generate_autostereogram(
     params = params or StereogramParams()
     depth = _validate_depth(depth)
     depth = remap_depth(depth, near=near, far=far, gamma=gamma)
-
 
     if params.eye_separation_px <= 0:
         raise ValueError("eye_separation_px must be > 0")
@@ -166,48 +209,44 @@ def generate_autostereogram(
         rng = np.random.default_rng(seed)
 
     mode_u = output_mode.upper()
+    sep = params.eye_separation_px
+    max_shift = params.max_shift_px
 
+    # ---- Build base texture ----
     if mode_u == "RGB":
-        channels = 3
         if pattern is None:
-            out = rng.integers(0, 256, size=(h, w, channels), dtype=np.uint8)
+            base = rng.integers(0, 256, size=(h, w, 3), dtype=np.uint8)
         else:
             if pattern.ndim != 3 or pattern.shape[2] != 3:
                 raise ValueError("RGB pattern must have shape (H, W, 3).")
             if pattern.dtype != np.uint8:
                 pattern = pattern.astype(np.uint8, copy=False)
-            out = _tile_pattern(pattern, h, w).copy()
+            base = _tile_pattern(pattern, h, w).copy()
 
     elif mode_u in {"L", "GRAY", "GREY"}:
-        channels = 1
         if pattern is None:
-            out = rng.integers(0, 256, size=(h, w), dtype=np.uint8)
+            base = rng.integers(0, 256, size=(h, w), dtype=np.uint8)
         else:
             if pattern.ndim != 2:
                 raise ValueError("Grayscale pattern must have shape (H, W).")
             if pattern.dtype != np.uint8:
                 pattern = pattern.astype(np.uint8, copy=False)
-            out = _tile_pattern(pattern, h, w).copy()
+            base = _tile_pattern(pattern, h, w).copy()
 
     else:
         raise ValueError('output_mode must be "RGB" or "L".')
 
-    # Enforce matching constraints row-by-row.
-    # For each pixel x, we look to a "partner" pixel to the left.
-    # Partner depends on depth (near => larger shift).
-    sep = params.eye_separation_px
-    max_shift = params.max_shift_px
+    # ---- Apply constraints ----
+    if not bidirectional:
+        out = base.copy()
+        out = _apply_constraints(out, depth, sep=sep, max_shift=max_shift, direction="lr")
+        return out
 
-    for y in range(h):
-        # Iterate left-to-right so that when we copy from partner,
-        # the partner pixel is already stabilised.
-        for x in range(sep, w):
-            shift = int(round(depth[y, x] * max_shift))
-            partner = x - sep + shift
-            if partner >= 0:
-                if channels == 3:
-                    out[y, x, :] = out[y, partner, :]
-                else:
-                    out[y, x] = out[y, partner]
+    # Bidirectional: do both passes from the same base then blend to reduce bias.
+    out_lr = _apply_constraints(base.copy(), depth, sep=sep, max_shift=max_shift, direction="lr")
+    out_rl = _apply_constraints(base.copy(), depth, sep=sep, max_shift=max_shift, direction="rl")
 
-    return out
+    # Blend safely in integer space to avoid overflow
+    blended = ((out_lr.astype(np.uint16) + out_rl.astype(np.uint16)) // 2).astype(np.uint8)
+    return blended
+
