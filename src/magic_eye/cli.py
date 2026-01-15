@@ -67,18 +67,28 @@ def build_parser() -> argparse.ArgumentParser:
         default=1.0,
         help="Input depth value treated as near (mapped to 1.0). Default: 1.0",
     )
+
     parser.add_argument(
         "--far",
         type=float,
         default=0.0,
         help="Input depth value treated as far (mapped to 0.0). Default: 0.0",
     )
+
     parser.add_argument(
         "--gamma",
         type=float,
         default=1.0,
         help="Depth curve shaping (>1 punchier, <1 flatter). Default: 1.0",
     )
+
+    parser.add_argument(
+        "--image",
+        type=Path,
+        default=None,
+        help="Optional RGB image to estimate depth from using AI.",
+    )
+
 
 
 
@@ -90,19 +100,33 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    depth = load_depth_map(args.depth)
+    # Validate input source
+    if args.depth is None and args.image is None:
+        parser.error("You must supply either --depth or --image")
 
+    if args.depth is not None and args.image is not None:
+        parser.error("Use only one of --depth or --image")
+
+    # Load or estimate depth
+    if args.image is not None:
+        from magic_eye.depth_ai import estimate_depth
+        depth = estimate_depth(args.image)
+    else:
+        depth = load_depth_map(args.depth)
+
+    # Stereogram parameters
     params = StereogramParams(
         eye_separation_px=args.eye_sep,
         max_shift_px=args.max_shift,
     )
 
+    # Optional texture / pattern
     pattern = None
     if args.pattern is not None:
         from magic_eye.io import load_pattern
         pattern = load_pattern(args.pattern, mode=args.mode)
 
-
+    # Generate stereogram
     img = generate_autostereogram(
         depth,
         params=params,
@@ -114,6 +138,7 @@ def main(argv: list[str] | None = None) -> int:
         gamma=args.gamma,
     )
 
+    # Save output
     save_image(img, args.out)
 
     print(f"✅ Saved stereogram to: {args.out}")
@@ -122,3 +147,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

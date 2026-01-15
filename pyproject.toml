@@ -19,6 +19,13 @@ dev = [
   "ruff>=0.4"
 ]
 
+ai = [
+  "torch>=2.1",
+  "torchvision>=0.16",
+  "opencv-python>=4.9"
+]
+
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 

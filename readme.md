@@ -61,3 +61,34 @@ python -m magic_eye.cli --depth path/to/depth.png --out output.png
 Tweak the depth effect:
 
 python -m magic_eye.cli --depth path/to/depth.png --out output.png --eye-sep 90 --max-shift 30
+
+## AI Depth Estimation (Optional)
+
+This project optionally supports generating depth maps from ordinary photos
+using a pretrained monocular depth estimation model (MiDaS).
+
+To enable AI depth estimation:
+
+```bash
+pip install -e .[ai]
+python -m magic_eye.cli --image photo.jpg --out magic_eye.png
+
+---
+
+# 5) Tests (why none here?)
+
+We **do not unit test** the AI model:
+- it downloads weights
+- it’s nondeterministic across hardware
+- it would break CI
+
+This is correct professional practice.
+
+---
+
+# ✅ Run checks
+
+Without AI:
+```bash
+pytest
+python -m magic_eye.cli --depth depth.png --out out.png
