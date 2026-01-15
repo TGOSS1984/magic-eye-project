@@ -54,6 +54,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional random seed for deterministic output.",
     )
 
+    parser.add_argument(
+        "--pattern",
+        type=Path,
+        default=None,
+        help="Optional texture/pattern image to tile across the output (PNG/JPG).",
+    )
+
+
 
     return parser
 
@@ -69,13 +77,19 @@ def main(argv: list[str] | None = None) -> int:
         max_shift_px=args.max_shift,
     )
 
+    pattern = None
+    if args.pattern is not None:
+        from magic_eye.io import load_pattern
+        pattern = load_pattern(args.pattern, mode=args.mode)
+
+
     img = generate_autostereogram(
         depth,
         params=params,
         output_mode=args.mode,
+        pattern=pattern,
         seed=args.seed,
     )
-
 
     save_image(img, args.out)
 

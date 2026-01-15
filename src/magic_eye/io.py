@@ -60,3 +60,36 @@ def save_image(image: np.ndarray, path: PathLike) -> None:
     image = np.clip(image, 0, 255).astype(np.uint8)
     img = Image.fromarray(image)
     img.save(path)
+
+def load_pattern(path: PathLike, *, mode: str = "RGB") -> np.ndarray:
+    """
+    Load a pattern/texture image for stereogram background and return as uint8 array.
+
+    Parameters
+    ----------
+    path : str or Path
+        Path to the pattern image.
+    mode : str
+        "RGB" (default) or "L" (grayscale).
+
+    Returns
+    -------
+    np.ndarray
+        Pattern array:
+        - RGB: shape (H, W, 3), dtype uint8
+        - L:   shape (H, W), dtype uint8
+    """
+    path = Path(path)
+
+    if not path.exists():
+        raise FileNotFoundError(f"Pattern image not found: {path}")
+
+    mode_u = mode.upper()
+    if mode_u == "RGB":
+        img = Image.open(path).convert("RGB")
+        return np.asarray(img, dtype=np.uint8)
+    if mode_u in {"L", "GRAY", "GREY"}:
+        img = Image.open(path).convert("L")
+        return np.asarray(img, dtype=np.uint8)
+
+    raise ValueError('mode must be "RGB" or "L".')

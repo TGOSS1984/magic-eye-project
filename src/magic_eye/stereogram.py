@@ -40,12 +40,33 @@ def _validate_depth(depth: np.ndarray) -> np.ndarray:
 
     return depth
 
+def _tile_pattern(pattern: np.ndarray, h: int, w: int) -> np.ndarray:
+    """
+    Tile a pattern image to exactly (h, w) or (h, w, c).
+    """
+    if pattern.ndim == 2:
+        ph, pw = pattern.shape
+        reps_y = (h + ph - 1) // ph
+        reps_x = (w + pw - 1) // pw
+        tiled = np.tile(pattern, (reps_y, reps_x))
+        return tiled[:h, :w]
+
+    if pattern.ndim == 3:
+        ph, pw, c = pattern.shape
+        reps_y = (h + ph - 1) // ph
+        reps_x = (w + pw - 1) // pw
+        tiled = np.tile(pattern, (reps_y, reps_x, 1))
+        return tiled[:h, :w, :]
+
+    raise ValueError("Pattern must be a 2D (L) or 3D (RGB) array.")
+
 
 def generate_autostereogram(
     depth: np.ndarray,
     *,
     params: Optional[StereogramParams] = None,
     output_mode: str = "RGB",
+    pattern: Optional[np.ndarray] = None,
     rng: Optional[np.random.Generator] = None,
     seed: Optional[int] = None,
 ) -> np.ndarray:
@@ -64,6 +85,12 @@ def generate_autostereogram(
         Stereogram parameters (eye separation and max shift).
     output_mode:
         "RGB" (default) or "L" (grayscale).
+        pattern:
+        Optional texture/pattern image array to use instead of random dots.
+        - For RGB output: provide shape (Hp, Wp, 3), dtype uint8
+        - For grayscale output: provide shape (Hp, Wp), dtype uint8
+        The pattern will be tiled to the output size.
+
     rng:
         Optional NumPy random generator. If provided, it is used directly.
     seed:
@@ -95,12 +122,30 @@ def generate_autostereogram(
     if rng is None:
         rng = np.random.default_rng(seed)
 
-    if output_mode.upper() == "RGB":
+    mode_u = output_mode.upper()
+
+    if mode_u == "RGB":
         channels = 3
-        out = rng.integers(0, 256, size=(h, w, channels), dtype=np.uint8)
-    elif output_mode.upper() in {"L", "GRAY", "GREY"}:
+        if pattern is None:
+            out = rng.integers(0, 256, size=(h, w, channels), dtype=np.uint8)
+        else:
+            if pattern.ndim != 3 or pattern.shape[2] != 3:
+                raise ValueError("RGB pattern must have shape (H, W, 3).")
+            if pattern.dtype != np.uint8:
+                pattern = pattern.astype(np.uint8, copy=False)
+            out = _tile_pattern(pattern, h, w).copy()
+
+    elif mode_u in {"L", "GRAY", "GREY"}:
         channels = 1
-        out = rng.integers(0, 256, size=(h, w), dtype=np.uint8)
+        if pattern is None:
+            out = rng.integers(0, 256, size=(h, w), dtype=np.uint8)
+        else:
+            if pattern.ndim != 2:
+                raise ValueError("Grayscale pattern must have shape (H, W).")
+            if pattern.dtype != np.uint8:
+                pattern = pattern.astype(np.uint8, copy=False)
+            out = _tile_pattern(pattern, h, w).copy()
+
     else:
         raise ValueError('output_mode must be "RGB" or "L".')
 
