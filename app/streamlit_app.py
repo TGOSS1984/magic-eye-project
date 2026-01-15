@@ -13,6 +13,8 @@ from magic_eye.stereogram import (
     smooth_depth,
 )
 
+from magic_eye.patterns import random_dots, blue_noise, vertical_stripes
+
 
 def to_u8(d: np.ndarray) -> np.ndarray:
     """Convert float32 depth [0..1] to uint8 image."""
@@ -135,6 +137,11 @@ show_depth_debug = st.sidebar.checkbox(
 )
 
 st.sidebar.header("Stereogram")
+pattern_source = st.sidebar.selectbox(
+    "Pattern source",
+    ["Built-in: Random dots", "Built-in: Blue noise", "Built-in: Stripes", "Upload image"],
+)
+
 eye_sep = st.sidebar.slider(
     "Eye separation (px)",
     20,
@@ -285,15 +292,28 @@ if generate:
                 mime="image/png",
             )
 
-        # ---- Optional pattern ----
+        # ---- Pattern source (built-in or upload) ----
         pattern = None
-        if uploaded_pattern is not None:
-            if mode == "RGB":
-                pattern_img = Image.open(uploaded_pattern).convert("RGB")
-                pattern = np.asarray(pattern_img, dtype=np.uint8)
-            else:
-                pattern_img = Image.open(uploaded_pattern).convert("L")
-                pattern = np.asarray(pattern_img, dtype=np.uint8)
+        base = None
+
+        h, w = depth.shape
+        channels = 3 if mode == "RGB" else 1
+        rng = np.random.default_rng(int(seed))
+
+        if pattern_source == "Built-in: Random dots":
+            base = random_dots(h, w, channels=channels, rng=rng)
+
+        elif pattern_source == "Built-in: Blue noise":
+            base = blue_noise(h, w, channels=channels, rng=rng)
+
+        elif pattern_source == "Built-in: Stripes":
+            base = vertical_stripes(h, w, channels=channels)
+
+        elif pattern_source == "Upload image":
+            if uploaded_pattern is not None:
+                img = Image.open(uploaded_pattern)
+                img = img.convert("RGB" if mode == "RGB" else "L")
+                pattern = np.asarray(img, dtype=np.uint8)
 
         # ---- Generate stereogram ----
         params = StereogramParams(
@@ -301,11 +321,13 @@ if generate:
             max_shift_px=int(max_shift),
         )
 
+
         result = generate_autostereogram(
             depth,
             params=params,
             output_mode=mode,
             pattern=pattern,
+            base=base,
             seed=int(seed),
             near=near,
             far=far,

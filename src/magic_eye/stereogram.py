@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Optional
-from PIL import Image, ImageFilter
-
 
 import numpy as np
+from PIL import Image, ImageFilter
 
 
 @dataclass(frozen=True)
@@ -72,6 +71,7 @@ def remap_depth(depth: np.ndarray, *, near: float, far: float, gamma: float) -> 
 
     return d
 
+
 def smooth_depth(depth: np.ndarray, *, radius: float) -> np.ndarray:
     """
     Smooth a normalised depth map [0..1] using a Gaussian blur.
@@ -84,14 +84,12 @@ def smooth_depth(depth: np.ndarray, *, radius: float) -> np.ndarray:
     if radius <= 0:
         return depth.astype(np.float32, copy=False)
 
-    # Convert to 8-bit grayscale image for Pillow filtering
     depth_u8 = np.clip(depth * 255.0, 0, 255).astype(np.uint8)
     img = Image.fromarray(depth_u8, mode="L")
     img_blur = img.filter(ImageFilter.GaussianBlur(radius=float(radius)))
 
     out = np.asarray(img_blur, dtype=np.float32) / 255.0
     return np.clip(out, 0.0, 1.0).astype(np.float32)
-
 
 
 def _tile_pattern(pattern: np.ndarray, h: int, w: int) -> np.ndarray:
@@ -166,6 +164,7 @@ def generate_autostereogram(
     params: Optional[StereogramParams] = None,
     output_mode: str = "RGB",
     pattern: Optional[np.ndarray] = None,
+    base: Optional[np.ndarray] = None,
     rng: Optional[np.random.Generator] = None,
     seed: Optional[int] = None,
     near: float = 1.0,
@@ -177,46 +176,18 @@ def generate_autostereogram(
     """
     Generate a single-image stereogram (Magic Eye / autostereogram) from a depth map.
 
-    This implementation uses a base texture (random dots or optional pattern) and
-    enforces horizontal matching constraints. If bidirectional=True, it applies
-    constraints left→right and right→left and combines the results to reduce
-    directional bias (useful for wide subjects like wings/landscapes).
+    Supports three base texture sources (in priority order):
+    1) base: a full-size (H,W) or (H,W,3) texture (already generated/tiled)
+    2) pattern: a smaller texture image that will be tiled to (H,W)
+    3) random dots fallback (seeded via rng/seed)
 
-    Parameters
-    ----------
-    depth:
-        Normalised depth map array of shape (H, W), values in [0.0, 1.0].
-        Brighter values are treated as nearer depth (more shift).
-    params:
-        Stereogram parameters (eye separation and max shift).
-    output_mode:
-        "RGB" (default) or "L" (grayscale).
-    pattern:
-        Optional texture/pattern image array to use instead of random dots.
-        - For RGB output: provide shape (Hp, Wp, 3), dtype uint8
-        - For grayscale output: provide shape (Hp, Wp), dtype uint8
-        The pattern will be tiled to the output size.
-    rng:
-        Optional NumPy random generator. If provided, it is used directly.
-    seed:
-        Optional integer seed. Used only if rng is None. Enables deterministic output.
-    near, far, gamma:
-        Depth remapping controls.
-    bidirectional:
-        If True, apply constraints in both directions and blend results.
-
-    Returns
-    -------
-    np.ndarray
-        Output image array:
-        - RGB: shape (H, W, 3), dtype uint8
-        - L:   shape (H, W), dtype uint8
+    If bidirectional=True, constraints are applied left→right and right→left
+    and results are blended to reduce directional bias.
     """
     params = params or StereogramParams()
     depth = _validate_depth(depth)
     depth = remap_depth(depth, near=near, far=far, gamma=gamma)
     depth = smooth_depth(depth, radius=depth_blur)
-
 
     if params.eye_separation_px <= 0:
         raise ValueError("eye_separation_px must be > 0")
@@ -238,41 +209,44 @@ def generate_autostereogram(
     sep = params.eye_separation_px
     max_shift = params.max_shift_px
 
-    # ---- Build base texture ----
-    if mode_u == "RGB":
-        if pattern is None:
-            base = rng.integers(0, 256, size=(h, w, 3), dtype=np.uint8)
-        else:
+    channels = 3 if mode_u == "RGB" else 1
+    if mode_u not in {"RGB", "L", "GRAY", "GREY"}:
+        raise ValueError('output_mode must be "RGB" or "L".')
+
+    # ---- Build base texture (base > pattern > random) ----
+    if base is not None:
+        if base.shape[:2] != (h, w):
+            raise ValueError("Provided base pattern must match depth size.")
+        out_base = base.copy()
+
+    elif pattern is not None:
+        if mode_u == "RGB":
             if pattern.ndim != 3 or pattern.shape[2] != 3:
                 raise ValueError("RGB pattern must have shape (H, W, 3).")
-            if pattern.dtype != np.uint8:
-                pattern = pattern.astype(np.uint8, copy=False)
-            base = _tile_pattern(pattern, h, w).copy()
-
-    elif mode_u in {"L", "GRAY", "GREY"}:
-        if pattern is None:
-            base = rng.integers(0, 256, size=(h, w), dtype=np.uint8)
         else:
             if pattern.ndim != 2:
                 raise ValueError("Grayscale pattern must have shape (H, W).")
-            if pattern.dtype != np.uint8:
-                pattern = pattern.astype(np.uint8, copy=False)
-            base = _tile_pattern(pattern, h, w).copy()
+
+        if pattern.dtype != np.uint8:
+            pattern = pattern.astype(np.uint8, copy=False)
+
+        out_base = _tile_pattern(pattern, h, w).copy()
 
     else:
-        raise ValueError('output_mode must be "RGB" or "L".')
+        if channels == 3:
+            out_base = rng.integers(0, 256, size=(h, w, 3), dtype=np.uint8)
+        else:
+            out_base = rng.integers(0, 256, size=(h, w), dtype=np.uint8)
 
     # ---- Apply constraints ----
     if not bidirectional:
-        out = base.copy()
+        out = out_base.copy()
         out = _apply_constraints(out, depth, sep=sep, max_shift=max_shift, direction="lr")
         return out
 
-    # Bidirectional: do both passes from the same base then blend to reduce bias.
-    out_lr = _apply_constraints(base.copy(), depth, sep=sep, max_shift=max_shift, direction="lr")
-    out_rl = _apply_constraints(base.copy(), depth, sep=sep, max_shift=max_shift, direction="rl")
+    out_lr = _apply_constraints(out_base.copy(), depth, sep=sep, max_shift=max_shift, direction="lr")
+    out_rl = _apply_constraints(out_base.copy(), depth, sep=sep, max_shift=max_shift, direction="rl")
 
-    # Blend safely in integer space to avoid overflow
     blended = ((out_lr.astype(np.uint16) + out_rl.astype(np.uint16)) // 2).astype(np.uint8)
     return blended
 
