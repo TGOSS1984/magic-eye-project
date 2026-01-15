@@ -45,5 +45,8 @@ This makes them an excellent showcase project for:
 
 ## Status
 
-🚧 Initial project scaffolding complete  
-🚧 Stereogram generation logic coming next
+✅ Project scaffolding complete  
+✅ Depth map loading / saving utilities complete  
+🚧 MVP stereogram generation added (random-dot autostereogram)  
+🚧 CLI coming next
+

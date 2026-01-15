@@ -1,0 +1,121 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Optional
+
+import numpy as np
+
+
+@dataclass(frozen=True)
+class StereogramParams:
+    """
+    Parameters controlling stereogram generation.
+
+    eye_separation_px:
+        The base horizontal separation (in pixels) used by the stereogram.
+        Larger values generally increase perceived depth but can make fusion harder.
+
+    max_shift_px:
+        Maximum additional shift applied for 'near' depth pixels.
+        Depth values are expected in [0.0, 1.0], so shift = depth * max_shift_px.
+    """
+
+    eye_separation_px: int = 80
+    max_shift_px: int = 24
+
+
+def _validate_depth(depth: np.ndarray) -> np.ndarray:
+    if depth.ndim != 2:
+        raise ValueError("Depth map must be a 2D array (H, W).")
+
+    depth = depth.astype(np.float32, copy=False)
+
+    dmin = float(depth.min())
+    dmax = float(depth.max())
+    if not (0.0 <= dmin <= 1.0 and 0.0 <= dmax <= 1.0):
+        raise ValueError(
+            "Depth map must be normalised to [0.0, 1.0]. "
+            "Use load_depth_map() or normalise before calling."
+        )
+
+    return depth
+
+
+def generate_autostereogram(
+    depth: np.ndarray,
+    *,
+    params: Optional[StereogramParams] = None,
+    output_mode: str = "RGB",
+    rng: Optional[np.random.Generator] = None,
+) -> np.ndarray:
+    """
+    Generate a single-image stereogram (Magic Eye / autostereogram) from a depth map.
+
+    This MVP implementation uses a random-dot base and enforces horizontal matching
+    constraints row-by-row.
+
+    Parameters
+    ----------
+    depth:
+        Normalised depth map array of shape (H, W), values in [0.0, 1.0].
+        Brighter values are treated as nearer depth (more shift).
+    params:
+        Stereogram parameters (eye separation and max shift).
+    output_mode:
+        "RGB" (default) or "L" (grayscale).
+    rng:
+        Optional NumPy random generator. If None, uses default generator.
+
+    Returns
+    -------
+    np.ndarray
+        Output image array:
+        - RGB: shape (H, W, 3), dtype uint8
+        - L:   shape (H, W), dtype uint8
+    """
+    params = params or StereogramParams()
+    depth = _validate_depth(depth)
+
+    if params.eye_separation_px <= 0:
+        raise ValueError("eye_separation_px must be > 0")
+    if params.max_shift_px < 0:
+        raise ValueError("max_shift_px must be >= 0")
+
+    h, w = depth.shape
+
+    if params.eye_separation_px >= w:
+        raise ValueError(
+            "eye_separation_px must be smaller than the image width "
+            f"(got {params.eye_separation_px} >= {w})."
+        )
+
+    rng = rng or np.random.default_rng()
+
+    if output_mode.upper() == "RGB":
+        channels = 3
+        out = rng.integers(0, 256, size=(h, w, channels), dtype=np.uint8)
+    elif output_mode.upper() in {"L", "GRAY", "GREY"}:
+        channels = 1
+        out = rng.integers(0, 256, size=(h, w), dtype=np.uint8)
+    else:
+        raise ValueError('output_mode must be "RGB" or "L".')
+
+    # Enforce matching constraints row-by-row.
+    # For each pixel x, we look to a "partner" pixel to the left.
+    # Partner depends on depth (near => larger shift).
+    sep = params.eye_separation_px
+    max_shift = params.max_shift_px
+
+    for y in range(h):
+        # Iterate left-to-right so that when we copy from partner,
+        # the partner pixel is already stabilised.
+        for x in range(sep, w):
+            shift = int(round(depth[y, x] * max_shift))
+            partner = x - sep + shift
+            if partner >= 0:
+                if channels == 3:
+                    out[y, x, :] = out[y, partner, :]
+                else:
+                    out[y, x] = out[y, partner]
+
+    return out
