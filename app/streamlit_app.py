@@ -13,6 +13,12 @@ from magic_eye.stereogram import (
     smooth_depth,
 )
 
+
+def to_u8(d: np.ndarray) -> np.ndarray:
+    """Convert float32 depth [0..1] to uint8 image."""
+    return (np.clip(d, 0.0, 1.0) * 255.0).astype(np.uint8)
+
+
 PRESETS = {
     "Balanced (default)": {
         "near": 0.90,
@@ -61,7 +67,6 @@ PRESETS = {
     },
 }
 
-
 st.set_page_config(
     page_title="Magic Eye Generator",
     page_icon="👁️",
@@ -91,7 +96,6 @@ preset_name = st.sidebar.selectbox(
 )
 preset = PRESETS[preset_name]
 
-
 use_ai = st.sidebar.checkbox("Use AI depth from photo", value=False)
 
 uploaded_depth = None
@@ -114,38 +118,35 @@ uploaded_pattern = st.sidebar.file_uploader(
 )
 
 st.sidebar.header("Depth controls")
-near = st.sidebar.slider(
-    "Near", 0.0, 1.0, preset["near"], 0.01
-)
-far = st.sidebar.slider(
-    "Far", 0.0, 1.0, preset["far"], 0.01
-)
-gamma = st.sidebar.slider(
-    "Gamma", 0.2, 3.0, preset["gamma"], 0.05
-)
+near = st.sidebar.slider("Near", 0.0, 1.0, preset["near"], 0.01)
+far = st.sidebar.slider("Far", 0.0, 1.0, preset["far"], 0.01)
+gamma = st.sidebar.slider("Gamma", 0.2, 3.0, preset["gamma"], 0.05)
 
 depth_blur = st.sidebar.slider(
     "Depth smoothing (blur radius)",
-    0.0, 3.0,
+    0.0,
+    3.0,
     preset["depth_blur"],
     0.1,
 )
 
-show_depth_debug = st.sidebar.checkbox("Show depth debug (raw/remapped/smoothed)", value=False)
-
-
+show_depth_debug = st.sidebar.checkbox(
+    "Show depth debug (raw/remapped/smoothed)", value=False
+)
 
 st.sidebar.header("Stereogram")
 eye_sep = st.sidebar.slider(
     "Eye separation (px)",
-    20, 150,
+    20,
+    150,
     preset["eye_sep"],
     5,
 )
 
 max_shift = st.sidebar.slider(
     "Max depth shift (px)",
-    0, 60,
+    0,
+    60,
     preset["max_shift"],
     2,
 )
@@ -155,10 +156,7 @@ bidirectional = st.sidebar.checkbox(
     value=preset["bidirectional"],
 )
 
-st.sidebar.caption(
-    f"Preset tuned for: **{preset_name}**"
-)
-
+st.sidebar.caption(f"Preset tuned for: **{preset_name}**")
 
 mode = st.sidebar.selectbox("Output mode", ["RGB", "L"])
 
@@ -190,7 +188,6 @@ if generate:
                 )
                 st.stop()
 
-            # Write uploaded bytes to a temporary file so estimate_depth() can use a path
             img_bytes = uploaded_image.read()
             suffix = Path(uploaded_image.name).suffix or ".png"
 
@@ -199,6 +196,12 @@ if generate:
                 tmp_path = tmp.name
 
             depth = estimate_depth(tmp_path)
+
+            # Best-effort cleanup of temp file
+            try:
+                Path(tmp_path).unlink(missing_ok=True)
+            except Exception:
+                pass
 
         else:
             if uploaded_depth is None:
@@ -216,47 +219,71 @@ if generate:
 
             depth = (depth - dmin) / (dmax - dmin)
 
-        # ---- Depth debug preview ----
-        
+        # ---- Depth debug preview + exports ----
         if show_depth_debug:
             depth_raw = np.clip(depth, 0.0, 1.0).astype(np.float32)
-
-            depth_remapped = remap_depth(
-                depth_raw, near=near, far=far, gamma=gamma
-            )
-            depth_smoothed = smooth_depth(
-                depth_remapped, radius=depth_blur
-            )
+            depth_remapped = remap_depth(depth_raw, near=near, far=far, gamma=gamma)
+            depth_smoothed = smooth_depth(depth_remapped, radius=depth_blur)
 
             st.subheader("Depth debug preview")
 
             c1, c2, c3 = st.columns(3)
 
-            def to_u8(d: np.ndarray) -> np.ndarray:
-                return (np.clip(d, 0.0, 1.0) * 255.0).astype(np.uint8)
-
             with c1:
                 st.caption(
-                    f"Raw depth (min={depth_raw.min():.3f}, "
-                    f"max={depth_raw.max():.3f})"
+                    f"Raw depth (min={depth_raw.min():.3f}, max={depth_raw.max():.3f})"
                 )
                 st.image(to_u8(depth_raw), clamp=True)
 
             with c2:
                 st.caption(
                     f"Remapped (near={near:.2f}, far={far:.2f}, gamma={gamma:.2f}) "
-                    f"(min={depth_remapped.min():.3f}, "
-                    f"max={depth_remapped.max():.3f})"
+                    f"(min={depth_remapped.min():.3f}, max={depth_remapped.max():.3f})"
                 )
                 st.image(to_u8(depth_remapped), clamp=True)
 
             with c3:
                 st.caption(
                     f"Smoothed (blur={depth_blur:.2f}) "
-                    f"(min={depth_smoothed.min():.3f}, "
-                    f"max={depth_smoothed.max():.3f})"
+                    f"(min={depth_smoothed.min():.3f}, max={depth_smoothed.max():.3f})"
                 )
                 st.image(to_u8(depth_smoothed), clamp=True)
+
+            # Download buttons
+            buf_raw = io.BytesIO()
+            Image.fromarray(to_u8(depth_raw), mode="L").save(buf_raw, format="PNG")
+            buf_raw.seek(0)
+
+            buf_remap = io.BytesIO()
+            Image.fromarray(to_u8(depth_remapped), mode="L").save(
+                buf_remap, format="PNG"
+            )
+            buf_remap.seek(0)
+
+            buf_smooth = io.BytesIO()
+            Image.fromarray(to_u8(depth_smoothed), mode="L").save(
+                buf_smooth, format="PNG"
+            )
+            buf_smooth.seek(0)
+
+            st.download_button(
+                "Download raw depth",
+                data=buf_raw,
+                file_name="depth_raw.png",
+                mime="image/png",
+            )
+            st.download_button(
+                "Download remapped depth",
+                data=buf_remap,
+                file_name="depth_remapped.png",
+                mime="image/png",
+            )
+            st.download_button(
+                "Download smoothed depth",
+                data=buf_smooth,
+                file_name="depth_smoothed.png",
+                mime="image/png",
+            )
 
         # ---- Optional pattern ----
         pattern = None
@@ -285,7 +312,6 @@ if generate:
             gamma=gamma,
             bidirectional=bidirectional,
             depth_blur=depth_blur,
-
         )
 
         # ---- Display + download ----
@@ -305,4 +331,3 @@ if generate:
 
     except Exception as exc:
         st.exception(exc)
-

@@ -118,3 +118,16 @@ live depth controls
 ```bash
 pip install -e .[web]
 streamlit run app/streamlit_app.py
+
+## Depth Inspection & Export
+
+The project allows inspection and export of intermediate depth maps.
+
+### CLI
+```bash
+python -m magic_eye.cli \
+  --image example.jpg \
+  --out magic_eye.png \
+  --save-depth depth.png
+
+

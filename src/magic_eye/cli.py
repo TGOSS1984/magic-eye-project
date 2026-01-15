@@ -102,6 +102,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional Gaussian blur radius applied to depth map (default: 0.0).",
     )
 
+    parser.add_argument(
+    "--save-depth",
+    type=Path,
+    default=None,
+    help="Optional path to save the processed depth map as a grayscale PNG.",
+)
 
 
     return parser
@@ -136,6 +142,24 @@ def main(argv: list[str] | None = None) -> int:
     if args.pattern is not None:
         from magic_eye.io import load_pattern
         pattern = load_pattern(args.pattern, mode=args.mode)
+
+    if args.save_depth is not None:
+        from PIL import Image
+        from magic_eye.stereogram import remap_depth, smooth_depth
+
+        depth_out = remap_depth(
+            depth,
+            near=args.near,
+            far=args.far,
+            gamma=args.gamma,
+        )
+        depth_out = smooth_depth(depth_out, radius=args.depth_blur)
+
+        depth_u8 = (depth_out * 255.0).clip(0, 255).astype("uint8")
+        Image.fromarray(depth_u8, mode="L").save(args.save_depth)
+
+        print(f"🧠 Saved depth map to: {args.save_depth}")
+
 
     # Generate stereogram
     img = generate_autostereogram(
