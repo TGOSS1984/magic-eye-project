@@ -50,3 +50,14 @@ This makes them an excellent showcase project for:
 🚧 MVP stereogram generation added (random-dot autostereogram)  
 🚧 CLI coming next
 
+## Usage (MVP)
+
+Generate a stereogram from a depth map:
+
+```bash
+pip install -e .[dev]
+python -m magic_eye.cli --depth path/to/depth.png --out output.png
+
+Tweak the depth effect:
+
+python -m magic_eye.cli --depth path/to/depth.png --out output.png --eye-sep 90 --max-shift 30
