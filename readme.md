@@ -1,182 +1,313 @@
-# Magic Eye Generator 🧠👁️
+# 👁️ Magic Eye Generator
 
-This project generates **Magic Eye / autostereogram images** from depth maps and
-(optionally) from ordinary photos using AI-based depth estimation.
+**Live demo:**  
+👉 https://magic-eye-project.streamlit.app/
 
-The goal is to build the system incrementally, starting with a classic
-depth-map-based stereogram generator, then extending it with a monocular depth
-model so users can create Magic Eye images from any photo.
+A professional-grade **Magic Eye / autostereogram generator** that creates single-image stereograms from:
 
----
+- Grayscale **depth maps**
+- Ordinary **RGB photos** (via optional AI depth estimation)
 
-## Project Roadmap
-
-### Phase 1 – Core Algorithm
-- Load grayscale depth maps
-- Generate single-image stereograms (Magic Eye images)
-- Support random-dot and texture-based patterns
-- Command-line interface
-
-### Phase 2 – Quality & Control
-- Adjustable depth scaling and eye separation
-- Deterministic output via random seeds
-- Improved depth-to-disparity mapping
-
-### Phase 3 – AI Enhancement
-- Generate depth maps from ordinary photos
-- End-to-end pipeline: image → depth → stereogram
-- Optional GPU acceleration
+The project combines classic stereogram algorithms with modern depth estimation and a polished Streamlit interface.
 
 ---
 
-## Why This Project?
+## 📚 Table of Contents
 
-Magic Eye images combine:
-- Image processing
-- Human visual perception
-- Algorithmic constraint solving
-
-This makes them an excellent showcase project for:
-- NumPy-based algorithms
-- Clean architectural design
-- Optional AI integration without overengineering
+- [Overview](#overview)
+- [Key Features](#key-features)
+- [How It Works](#how-it-works)
+- [Project Architecture](#project-architecture)
+- [Usage](#usage)
+  - [Command Line Interface (CLI)](#command-line-interface-cli)
+  - [Web App (Streamlit)](#web-app-streamlit)
+- [AI Depth Estimation (Optional)](#ai-depth-estimation-optional)
+- [Depth Debug & Inspection Tools](#depth-debug--inspection-tools)
+- [Presets & Visual Tuning](#presets--visual-tuning)
+- [Deployment](#deployment)
+- [Testing Philosophy](#testing-philosophy)
+- [Demo Assets](#demo-assets)
+- [Roadmap](#roadmap)
 
 ---
 
-## Status
+## 🧠 Overview
 
-✅ Project scaffolding complete  
-✅ Depth map loading / saving utilities complete  
-🚧 MVP stereogram generation added (random-dot autostereogram)  
-🚧 CLI coming next
+Magic Eye (autostereogram) images encode 3D depth information into a **single 2D image** that the human visual system can decode without glasses.
 
-## Usage (MVP)
+This project builds that pipeline end-to-end:
+
+RGB photo (optional)
+↓
+Depth estimation
+↓
+Depth remapping & smoothing
+↓
+Stereogram constraint solver
+↓
+Magic Eye image
+
+yaml
+Copy code
+
+The system is designed to be:
+- Modular
+- Inspectable
+- Deterministic (when desired)
+- Suitable for both CLI and web use
+
+---
+
+## ✨ Key Features
+
+- 🎯 Classic random-dot and texture-based autostereograms
+- 🧠 Optional AI depth-from-photo (MiDaS-style monocular depth)
+- 🎚️ Full control over depth mapping, eye separation, and smoothing
+- 🔁 Bidirectional constraint solving for wide subjects
+- 🖼️ Built-in texture generators (random dots, blue noise, stripes)
+- 🔍 Depth debug preview (raw → remapped → smoothed)
+- 💾 Exportable intermediate depth maps
+- 🌐 Deployed Streamlit web demo
+
+---
+
+## ⚙️ How It Works
+
+At its core, the generator:
+
+1. **Normalises depth** into `[0, 1]`
+2. **Remaps depth** using near/far planes and gamma curves
+3. **Optionally smooths** noisy depth maps
+4. **Applies stereogram constraints** horizontally
+5. **Blends passes** (optional bidirectional mode)
+6. Produces a single stereogram image
+
+This mirrors how classic Magic Eye images were created — with modern tooling.
+
+---
+
+## 🏗️ Project Architecture
+
+magic-eye-project/
+│
+├── app/
+│ └── streamlit_app.py # Web UI
+│
+├── src/
+│ └── magic_eye/
+│ ├── stereogram.py # Core algorithm
+│ ├── depth_ai.py # AI depth estimation
+│ ├── depth_sculpt.py # Synthetic depth enhancement
+│ ├── patterns.py # Texture generators
+│ └── cli.py # Command-line interface
+│
+├── examples/
+│ └── demo_depth.png # Known-good demo depth map
+│
+├── docs/
+│ ├── screenshots/ # UI screenshots (placeholder)
+│ └── demo.gif # Demo animation (placeholder)
+│
+├── requirements.txt
+└── README.md
+
+yaml
+Copy code
+
+---
+
+## 🚀 Usage
+
+### Command Line Interface (CLI)
 
 Generate a stereogram from a depth map:
 
 ```bash
 pip install -e .[dev]
-python -m magic_eye.cli --depth path/to/depth.png --out output.png
-
-Tweak the depth effect:
-
-python -m magic_eye.cli --depth path/to/depth.png --out output.png --eye-sep 90 --max-shift 30
-
-## AI Depth Estimation (Optional)
-
-This project optionally supports generating depth maps from ordinary photos
-using a pretrained monocular depth estimation model (MiDaS).
-
-To enable AI depth estimation:
-
-```bash
-pip install -e .[ai]
-python -m magic_eye.cli --image photo.jpg --out magic_eye.png
-
----
-
-# 5) Tests (why none here?)
-
-We **do not unit test** the AI model:
-- it downloads weights
-- it’s nondeterministic across hardware
-- it would break CI
-
-This is correct professional practice.
-
----
-
-# ✅ Run checks
-
-Without AI:
-```bash
-pytest
-python -m magic_eye.cli --depth depth.png --out out.png
-## Web Demo (Streamlit)
-
-An interactive Streamlit app is included for live experimentation.
-
-```bash
-pip install -e .[web]
-streamlit run app/streamlit_app.py
-
-The web app supports:
-
-depth map uploads
-
-AI depth from photos (optional)
-
-texture patterns
-
-live depth controls
-
-
----
-
-# 4️⃣ Run locally
-
-```bash
-pip install -e .[web]
-streamlit run app/streamlit_app.py
-
-## Depth Inspection & Export
-
-The project allows inspection and export of intermediate depth maps.
-
-### CLI
-```bash
 python -m magic_eye.cli \
-  --image example.jpg \
-  --out magic_eye.png \
-  --save-depth depth.png
+  --depth path/to/depth.png \
+  --out output.png
+Tweak depth perception:
 
-## Run locally
+bash
+Copy code
+python -m magic_eye.cli \
+  --depth depth.png \
+  --out output.png \
+  --eye-sep 90 \
+  --max-shift 30
+🌐 Web App (Streamlit)
+Run locally:
 
-```bash
+bash
+Copy code
 pip install -e .[web]
 streamlit run app/streamlit_app.py
-Optional AI depth-from-photo (local only):
+Features
+Upload depth maps or RGB photos
+
+Built-in demo depth (no uploads required)
+
+Pattern selection
+
+Live depth tuning
+
+Depth debug previews
+
+Downloadable results
+
+📸 Screenshot placeholder:
+docs/screenshots/streamlit_ui.png
+
+🧠 AI Depth Estimation (Optional)
+AI depth estimation is optional and disabled on some deployments.
+
+To enable locally:
 
 bash
 Copy code
 pip install -e .[web,ai]
 streamlit run app/streamlit_app.py
-csharp
+The AI pipeline:
+
+Uses a pretrained monocular depth model
+
+Produces relative (not metric) depth
+
+Can be enhanced with synthetic sculpting for stereograms
+
+🔍 Depth Debug & Inspection Tools
+When enabled, the app displays:
+
+Raw depth
+
+Remapped depth
+
+Smoothed depth
+
+Each stage can be exported for inspection.
+
+This makes the system transparent and educational — not a black box.
+
+🎛️ Presets & Visual Tuning
+Included presets optimise for different subject types:
+
+Balanced (default)
+
+Character / Portrait
+
+Creature / Wide subject
+
+Landscape / Scene
+
+High detail / Noisy depth
+
+Presets adjust:
+
+Near / far depth planes
+
+Gamma curves
+
+Blur radius
+
+Eye separation
+
+Bidirectional passes
+
+☁️ Deployment
+This project is deployed using Streamlit Community Cloud.
+
+Deploy your own copy
+Fork this repository
+
+Create a new app in Streamlit Community Cloud
+
+Set the entry file to:
+
+bash
 Copy code
+app/streamlit_app.py
+Dependencies are installed from requirements.txt
 
-### Add: “Deploy (Streamlit Community Cloud)”
-```md
-## Deploy (Streamlit Community Cloud)
+⚠️ Python version is configured via Streamlit Cloud settings.
 
-This repo includes a lightweight `requirements.txt` suitable for Streamlit Community Cloud. :contentReference[oaicite:3]{index=3}
+🧪 Testing Philosophy
+We do not unit-test the AI model, by design:
 
-1. Push the repo to GitHub
-2. Create a new app in Streamlit Community Cloud
-3. Set the main file to: `app/streamlit_app.py`
-4. Ensure dependencies are installed from `requirements.txt`
+It downloads large pretrained weights
 
-Note: Python version is configured in Streamlit Cloud settings (not `runtime.txt`). :contentReference[oaicite:4]{index=4}
-Add: “Demo assets”
-md
+Outputs vary across hardware
+
+It would break deterministic CI
+
+Instead, testing focuses on:
+
+Core stereogram algorithms
+
+Deterministic depth pipelines
+
+Manual visual verification (industry standard for this domain)
+
+This is deliberate and professional practice.
+
+🎥 Demo Assets
+Demo Depth Map
+A known-good depth map is included:
+
+bash
 Copy code
-## Demo assets
+examples/demo_depth.png
+Used for:
 
-Generate a known-good stereogram and depth map:
+Demo mode
 
-```bash
-python scripts/generate_demo_assets.py
-Outputs are saved to examples/.
+Regression testing
 
-csharp
-Copy code
+Visual tuning
 
-### Add: “Demo GIF”
-```md
-## Demo GIF
+Demo GIF (placeholder)
 
-![Streamlit demo](docs/demo.gif)
 
-To create the GIF:
-- Run the app locally
-- Use ScreenToGif (Windows) or Peek (Linux) to record a short clip
-- Save as `docs/demo.gif`
+To create:
+
+Run the app locally
+
+Record a short interaction
+
+Save as docs/demo.gif
+
+🛣️ Roadmap
+Completed
+✅ Core stereogram algorithm
+
+✅ CLI tool
+
+✅ Streamlit UI
+
+✅ AI depth integration
+
+✅ Depth debug tooling
+
+✅ Cloud deployment
+
+Possible Extensions
+Export side-by-side stereo pairs
+
+Animated depth sweeps
+
+VR-friendly output
+
+Performance optimisations (Numba / Cython)
+
+📌 Final Notes
+This project is intentionally scoped to demonstrate:
+
+Algorithmic thinking
+
+Visual computing
+
+Clean Python architecture
+
+Responsible AI integration
+
+It is designed to be understandable, extensible, and portfolio-ready.
