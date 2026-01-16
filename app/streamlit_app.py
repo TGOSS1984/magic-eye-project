@@ -17,6 +17,7 @@ from magic_eye.stereogram import (
 
 from magic_eye.patterns import random_dots, blue_noise, vertical_stripes
 
+DEMO_DEPTH_PATH = Path(__file__).resolve().parents[1] / "examples" / "demo_depth.png"
 
 def to_u8(d: np.ndarray) -> np.ndarray:
     """Convert float32 depth [0..1] to uint8 image."""
@@ -93,6 +94,16 @@ Generate **Magic Eye / autostereogram images** from depth maps or ordinary photo
 # ----------------------------
 st.sidebar.header("Input")
 
+def ai_available() -> bool:
+    try:
+        import torch  # noqa: F401
+        import cv2  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+demo_mode = st.sidebar.checkbox("Use built-in demo depth", value=False)
+
 preset_name = st.sidebar.selectbox(
     "Preset",
     list(PRESETS.keys()),
@@ -100,7 +111,12 @@ preset_name = st.sidebar.selectbox(
 )
 preset = PRESETS[preset_name]
 
-use_ai = st.sidebar.checkbox("Use AI depth from photo", value=False)
+if ai_available():
+    use_ai = st.sidebar.checkbox("Use AI depth from photo", value=False)
+else:
+    use_ai = False
+    st.sidebar.info("AI depth-from-photo is disabled on this deployment.")
+
 
 uploaded_depth = None
 uploaded_image = None
@@ -193,49 +209,76 @@ generate = st.sidebar.button("Generate Magic Eye")
 # ----------------------------
 if generate:
     try:
-        # ---- Get depth ----
-        if use_ai:
-            if uploaded_image is None:
-                st.error("Please upload an image.")
+                # ---- Get depth ----
+        if demo_mode:
+            if not DEMO_DEPTH_PATH.exists():
+                st.error(f"Demo depth not found at: {DEMO_DEPTH_PATH}")
                 st.stop()
 
-            from magic_eye.depth_ai import estimate_depth
+            depth_img = Image.open(DEMO_DEPTH_PATH).convert("L")
+            depth = np.asarray(depth_img, dtype=np.float32)
 
-            # --- Read uploaded image bytes ONCE ---
-            img_bytes = uploaded_image.read()
-            suffix = Path(uploaded_image.name).suffix or ".png"
+            dmin = float(depth.min())
+            dmax = float(depth.max())
+            if dmax == dmin:
+                st.error("Demo depth map has no variation (all pixels identical).")
+                st.stop()
 
-            # --- Decode image to RGB NumPy array (needed for sculpting) ---
-            img_pil = Image.open(io.BytesIO(img_bytes)).convert("RGB")
-            img_rgb = np.asarray(img_pil, dtype=np.uint8)
-
-            # --- Write temp file for AI depth model ---
-            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                tmp.write(img_bytes)
-                tmp_path = tmp.name
-
-            # --- Estimate AI depth ---
-            depth = estimate_depth(tmp_path)
-
-            # --- OPTIONAL: synthetic depth sculpting ---
-            if auto_sculpt_depth:
-                depth = generate_synthetic_depth(
-                    depth,
-                    img_rgb,
-                    strength=sculpt_strength,
-                )
-
-
-            # Best-effort cleanup of temp file
-            try:
-                Path(tmp_path).unlink(missing_ok=True)
-            except Exception:
-                pass
+            depth = (depth - dmin) / (dmax - dmin)
 
         else:
-            if uploaded_depth is None:
-                st.error("Please upload a depth map.")
-                st.stop()
+            if use_ai:
+                if uploaded_image is None:
+                    st.error("Please upload an image.")
+                    st.stop()
+
+                from magic_eye.depth_ai import estimate_depth
+
+                # --- Read uploaded image bytes ONCE ---
+                img_bytes = uploaded_image.read()
+                suffix = Path(uploaded_image.name).suffix or ".png"
+
+                # --- Decode image to RGB NumPy array (needed for sculpting) ---
+                img_pil = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+                img_rgb = np.asarray(img_pil, dtype=np.uint8)
+
+                # --- Write temp file for AI depth model ---
+                with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                    tmp.write(img_bytes)
+                    tmp_path = tmp.name
+
+                # --- Estimate AI depth ---
+                depth = estimate_depth(tmp_path)
+
+                # --- OPTIONAL: synthetic depth sculpting ---
+                if auto_sculpt_depth:
+                    depth = generate_synthetic_depth(
+                        depth,
+                        img_rgb,
+                        strength=sculpt_strength,
+                    )
+
+                # Best-effort cleanup of temp file
+                try:
+                    Path(tmp_path).unlink(missing_ok=True)
+                except Exception:
+                    pass
+
+            else:
+                if uploaded_depth is None:
+                    st.error("Please upload a depth map.")
+                    st.stop()
+
+                depth_img = Image.open(uploaded_depth).convert("L")
+                depth = np.asarray(depth_img, dtype=np.float32)
+
+                dmin = float(depth.min())
+                dmax = float(depth.max())
+                if dmax == dmin:
+                    st.error("Depth map has no variation (all pixels identical).")
+                    st.stop()
+
+                depth = (depth - dmin) / (dmax - dmin)
 
             depth_img = Image.open(uploaded_depth).convert("L")
             depth = np.asarray(depth_img, dtype=np.float32)

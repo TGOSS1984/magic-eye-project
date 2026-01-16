@@ -130,4 +130,53 @@ python -m magic_eye.cli \
   --out magic_eye.png \
   --save-depth depth.png
 
+## Run locally
 
+```bash
+pip install -e .[web]
+streamlit run app/streamlit_app.py
+Optional AI depth-from-photo (local only):
+
+bash
+Copy code
+pip install -e .[web,ai]
+streamlit run app/streamlit_app.py
+csharp
+Copy code
+
+### Add: “Deploy (Streamlit Community Cloud)”
+```md
+## Deploy (Streamlit Community Cloud)
+
+This repo includes a lightweight `requirements.txt` suitable for Streamlit Community Cloud. :contentReference[oaicite:3]{index=3}
+
+1. Push the repo to GitHub
+2. Create a new app in Streamlit Community Cloud
+3. Set the main file to: `app/streamlit_app.py`
+4. Ensure dependencies are installed from `requirements.txt`
+
+Note: Python version is configured in Streamlit Cloud settings (not `runtime.txt`). :contentReference[oaicite:4]{index=4}
+Add: “Demo assets”
+md
+Copy code
+## Demo assets
+
+Generate a known-good stereogram and depth map:
+
+```bash
+python scripts/generate_demo_assets.py
+Outputs are saved to examples/.
+
+csharp
+Copy code
+
+### Add: “Demo GIF”
+```md
+## Demo GIF
+
+![Streamlit demo](docs/demo.gif)
+
+To create the GIF:
+- Run the app locally
+- Use ScreenToGif (Windows) or Peek (Linux) to record a short clip
+- Save as `docs/demo.gif`
