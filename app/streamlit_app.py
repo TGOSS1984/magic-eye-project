@@ -6,6 +6,15 @@ import numpy as np
 import streamlit as st
 from PIL import Image
 
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "src"
+if SRC.exists():
+    sys.path.insert(0, str(SRC))
+
+
 from magic_eye.depth_sculpt import generate_synthetic_depth
 
 from magic_eye.stereogram import (
