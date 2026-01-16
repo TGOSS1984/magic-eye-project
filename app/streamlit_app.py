@@ -89,6 +89,17 @@ Generate **Magic Eye / autostereogram images** from depth maps or ordinary photo
 """
 )
 
+with st.expander("👁️ How to view Magic Eye images"):
+    st.markdown("""
+    1. Relax your eyes and look *through* the image
+    2. Do not focus on the dots
+    3. Slowly increase viewing distance
+    4. Let the 3D shape pop forward
+
+    Tip: It may take 10–30 seconds the first time.
+    """)
+
+
 # ----------------------------
 # Sidebar controls
 # ----------------------------
